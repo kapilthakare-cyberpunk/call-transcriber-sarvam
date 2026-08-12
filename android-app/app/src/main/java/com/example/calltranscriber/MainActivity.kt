@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -16,36 +17,93 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.calltranscriber.ui.theme.CallTranscriberTheme
-import com.example.calltranscriber.util.checkRequiredPermissions
 
 class MainActivity : ComponentActivity() {
+
+    private val requiredPermissions = arrayOf(
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.READ_PHONE_STATE,
+        Manifest.permission.POST_NOTIFICATIONS,
+        Manifest.permission.FOREGROUND_SERVICE,
+        Manifest.permission.READ_MEDIA_AUDIO
+    )
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        val allGranted = granted.all { it.value }
+        if (allGranted) {
+            navigateToHome()
+        }
+    }
+
+    private fun hasAllPermissions(): Boolean =
+        requiredPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             CallTranscriberTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    val navController = rememberNavController()
+                    NavHost(navController = navController, startDestination = "permissions") {
+                        composable("permissions") {
+                            PermissionRequestScreen(onGranted = {
+                                if (hasAllPermissions()) {
+                                    navController.navigate("home") {
+                                        popUpTo("permissions") { inclusive = true }
+                                    }
+                                } else {
+                                    permissionLauncher.launch(requiredPermissions)
+                                }
+                            })
+                        }
+                        composable("home") {
+                            HomeScreen()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun navigateToHome() {
+        setContent {
+            CallTranscriberTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
                     val navController = rememberNavController()
                     NavHost(navController = navController, startDestination = "home") {
                         composable("home") {
-                            if (!checkRequiredPermissions(this@MainActivity)) {
-                                PermissionRequestScreen(onGranted = {
+                            HomeScreen()
+                        }
+                        composable("permissions") {
+                            PermissionRequestScreen(onGranted = {
+                                if (hasAllPermissions()) {
                                     navController.navigate("home") {
-                                        popUpTo("home") { inclusive = true }
+                                        popUpTo("permissions") { inclusive = true }
                                     }
-                                })
-                            } else {
-                                HomeScreen()
-                            }
+                                } else {
+                                    permissionLauncher.launch(requiredPermissions)
+                                }
+                            })
                         }
                     }
                 }
@@ -56,30 +114,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun PermissionRequestScreen(onGranted: () -> Unit) {
-    val permissions = mutableListOf(
-        Manifest.permission.READ_MEDIA_AUDIO,
-        Manifest.permission.POST_NOTIFICATIONS,
-        Manifest.permission.FOREGROUND_SERVICE,
-        Manifest.permission.READ_PHONE_STATE
-    )
-
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Permissions required")
+        Text(
+            text = "Permissions required",
+            style = MaterialTheme.typography.titleLarge
+        )
         Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = {
-            ActivityCompat.requestPermissions(
-                /* todo: */
-                /* placeholder for activity reference */,
-                permissions.toTypedArray(),
-                1001
-            )
-            onGranted()
-        }) {
-            Text("Grant permissions")
+        Button(onClick = onGranted) {
+            Text(text = "Grant permissions")
         }
     }
 }
@@ -91,8 +137,14 @@ fun HomeScreen() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Call Transcriber")
+        Text(
+            text = "Call Transcriber",
+            style = MaterialTheme.typography.headlineMedium
+        )
         Spacer(modifier = Modifier.height(16.dp))
-        Text("Event-driven call detection enabled.")
+        Text(
+            text = "Event-driven call detection enabled.",
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
