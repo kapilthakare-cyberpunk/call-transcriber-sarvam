@@ -142,27 +142,71 @@ sarvam_transcribe() { # wav -> transcript on stdout; return 3 if no key
   printf '%s' "$out" | sed 's/^ *//; s/  */ /g'
 }
 
-# ---- Summary LLM (free API or local) -----------------------------------------
+# ---- Local Whisper transcription ---------------------------------------------
+whisper_transcribe() { # wav -> transcript on stdout; return 3 if no binary/model
+  [ -x "${WHISPER_BIN:-}" ] || { echo "NO_WHISPER_BIN"; return 3; }
+  [ -n "${WHISPER_MODEL:-}" ] || { echo "NO_WHISPER_MODEL"; return 3; }
+  local out
+  out=$("${WHISPER_BIN}" -m "${WHISPER_MODEL}" -f "$1" --no-timestamps --print-colors 2>/dev/null || true)
+  [ -n "$out" ] && printf '%s' "$out" || echo "(no transcript returned)"
+}
+
+# ---- Free/remote LLM providers (local kept as fallback) -----------------------
 ai_summary() { # text -> summary
-  local text="$1" body
-  case "${SUMMARY_PROVIDER:-}" in
-    free)
-      [ -n "${SUMMARY_API_KEY:-}" ] || { echo "NO_FREE_KEY"; return 1; }
+  local text="$1" body provider="${SUMMARY_PROVIDER:-local}"
+  case "$provider" in
+    openrouter|groq|cerebras|mistral|opencode_zen)
+      [ -n "${SUMMARY_API_KEY:-}" ] || { echo "NO_API_KEY"; return 1; }
+      [ -n "${SUMMARY_API_URL:-}" ] || { echo "NO_API_URL"; return 1; }
       body=$(jq -nc \
-        --arg model "${SUMMARY_MODEL}" \
+        --arg model "${SUMMARY_MODEL:-auto}" \
         --arg txt "$text" \
         '{model:$model,messages:[{role:"user",content:("Summarize this phone call in 3-5 bullets; list decisions/action-items. Write in the same language as the call.\n\n"+$txt)}],max_tokens:512,temperature:0.3}' 2>/dev/null || true)
       curl -s --max-time 60 -X POST "${SUMMARY_API_URL}" \
         -H "Authorization: Bearer ${SUMMARY_API_KEY}" -H "Content-Type: application/json" \
         -d "$body" | jq -r '.choices[0].message.content // "summary_failed"' 2>/dev/null || echo "summary_failed"
       ;;
-    local)
+    none)
+      echo "Summary disabled"
+      ;;
+    *)
       [ -n "${LLM_MODEL:-}" ] || { echo "NO_LOCAL_MODEL"; return 1; }
       curl -s --max-time 120 "${OLLAMA_URL}/api/generate" -d "{\"model\":\"${LLM_MODEL}\",\"stream\":false,\"prompt\":\"Summarize this phone call in 3-5 bullets; list action-items. Call: \\\"$text\\\"\"}" \
         | jq -r '.response // ""' 2>/dev/null || echo "summary_failed"
       ;;
-    *) echo "Summary provider not configured (set SUMMARY_PROVIDER=free|local + keys). Run: bash /root/projects/call-transcriber/scripts/configure-sarvam.sh"; return 1 ;;
   esac
+}
+
+# ---- Classification with optional free LLM fallback ---------------------------
+classify_transcript() {
+  local text="$1" contact="$2" wscore pscore verdict contact_lc provider="${SUMMARY_PROVIDER:-local}"
+  wscore=$(keyword_score "$text" $WORK_KEYWORDS)
+  pscore=$(keyword_score "$text" $PERSONAL_KEYWORDS)
+  contact_lc=$(printf '%s' "$contact" | tr 'A-Z' 'a-z')
+  if [ -n "${WORK_CONTACTS:-}" ] && grep -qiE "${WORK_CONTACTS}" <<< "$contact_lc"; then echo "WORK"; return; fi
+  if [ -n "${PERSONAL_CONTACTS:-}" ] && grep -qiE "${PERSONAL_CONTACTS}" <<< "$contact_lc"; then echo "NOTWORK"; return; fi
+  if [ "$wscore" -gt 0 ] && [ "$wscore" -ge "$pscore" ]; then echo "WORK"; return; fi
+  if [ "$pscore" -gt 0 ] && [ "$pscore" -gt "$wscore" ]; then echo "NOTWORK"; return; fi
+  if [ "$wscore" -eq 0 ] && [ "$pscore" -eq 0 ]; then
+    verdict=""
+    case "$provider" in
+      openrouter|groq|cerebras|mistral|opencode_zen)
+        [ -n "${SUMMARY_API_KEY:-}" ] || { echo "UNKNOWN"; return; }
+        [ -n "${SUMMARY_API_URL:-}" ] || { echo "UNKNOWN"; return; }
+        body=$(jq -nc --arg model "${SUMMARY_MODEL:-auto}" --arg txt "$text" '{model:$model,messages:[{role:"user",content:("Classify this phone call as WORK or NOTWORK. Reply with exactly one label.\nCall: \"$txt\"\nLabel:")}],max_tokens:8,temperature:0}' 2>/dev/null || true)
+        verdict=$(curl -s --max-time 60 -X POST "${SUMMARY_API_URL}" -H "Authorization: Bearer ${SUMMARY_API_KEY}" -H "Content-Type: application/json" -d "$body" | jq -r '.choices[0].message.content // ""' 2>/dev/null || true)
+        ;;
+      *)
+        verdict=$(curl -s --max-time 300 "$OLLAMA_URL/api/generate" \
+          -d "{\"model\":\"${LLM_MODEL:-qwen2.5:1.5b}\",\"stream\":false,\"options\":{\"num_predict\":8,\"temperature\":0},\"prompt\":\"Classify this phone call. Reply with exactly WORK or NOTWORK.\\nCall: \\\"$text\\\"\\nAnswer: WORK or NOTWORK?\"}" | jq -r '.response // ""' 2>/dev/null || true)
+        ;;
+    esac
+    case "$verdict" in
+      *WORK*) echo "WORK" ;; *NOTWORK*) echo "NOTWORK" ;; *) echo "UNKNOWN" ;;
+    esac
+    return
+  fi
+  echo "NOTWORK"
 }
 
 # ---- Approval UI -------------------------------------------------------------

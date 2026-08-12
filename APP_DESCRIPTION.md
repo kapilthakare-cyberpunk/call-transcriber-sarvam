@@ -11,7 +11,7 @@ The app also offers an optional AI‑generated summary/extraction of the call's 
 
 | Feature | Description |
 |---|---|
-| **New‑call detection** | Scans `/sdcard/Recordings` (via MediaStore polling) for `.m4a` files that arrived after the last check. |
+| **New‑call detection** | Triggered after a call ends and a recording is saved, using `TelephonyManager` call-state tracking and `MediaStore` observer for the new file. |
 | **Per‑call approval gate** | On every new recording, a toast‑style inline card appears with three buttons:<br>• 🎤 **Transcribe** (Sarvam AI STT only)<br>• 📝 **Transcribe + Summary** (Sarvam + free/local LLM)<br>• ❌ **Skip** (no cost) |
 | **Sarvam AI transcription** | Uses the `saaras:v3` model on `https://api.sarvam.ai/speech-to-text`. Audio is split into 29s chunks (the REST API caps at 30s) and stitched back together. Works excellently with Marathi, Hindi, and English code‑switching. |
 | **WORK / NOTWORK classification** | Keyword‑rule based (invoice, payment, client, etc.) with an optional Ollama/LLM tiebreaker when no keywords match. Calls classified as **WORK** are forwarded to Telegram. |
@@ -37,7 +37,7 @@ The app also offers an optional AI‑generated summary/extraction of the call's 
 
 | Layer | Technology |
 |---|---|
-| **Detection** | `BroadcastReceiver` + `MediaStore` observer (new `.m4a` files in `/sdcard/Recordings/Call`) |
+| **Detection** | `TelephonyManager` call-state listener + `MediaStore` observer for new `.m4a` files in `/sdcard/Recordings/Call` |
 | **Transcode** | `ffmpeg` (m4a → 16 kHz mono PCM WAV) |
 | **STT** | `OkHttp` + `multipart/form‑data` POST to `https://api.sarvam.ai/speech-to-text` <br>• Header: `api-subscription-key: <YOUR_KEY>`<br>• Fields: `file`, `model=saaras:v3`, `mode=transcribe`, `language_code=unknown` |
 | **Chunking** | 29s segments (safe under the 30s REST cap) |
