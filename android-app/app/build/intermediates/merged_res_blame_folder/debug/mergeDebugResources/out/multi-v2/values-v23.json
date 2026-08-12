@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.example.calltranscriber.app-mergeDebugResources-56:/values-v23/values-v23.xml",
+            "map": [
+                {
+                    "source": "/root/.gradle/caches/8.9/transforms/8b98374b2f1d413300ff079fbfab53c1/transformed/work-runtime-2.9.1/res/values-v23/values-v23.xml",
+                    "from": {
+                        "startLines": "2,3",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,121",
+                        "endColumns": "65,62",
+                        "endOffsets": "116,179"
+                    }
+                }
+            ]
+        }
+    ]
+}
