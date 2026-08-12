@@ -6,25 +6,27 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.os.Build
+import android.provider.MediaStore
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
-import android.provider.MediaStore
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.calltranscriber.R
+import java.io.File
 
-class CallEventService : Service() {
+class CallTranscriberForegroundService : Service() {
 
-    private val TAG = "CallEventService"
+    private val TAG = "CallTranscriberService"
     private lateinit var telephonyManager: TelephonyManager
     private val listener = object : PhoneStateListener() {
         override fun onCallStateChanged(state: Int, incomingNumber: String?) {
             super.onCallStateChanged(state, incomingNumber)
             if (state == TelephonyManager.CALL_STATE_IDLE) {
                 Log.i(TAG, "Call ended, checking for new recording")
-                enqueueTranscriptionWorker()
+                enqueueLatestRecording()
             }
         }
     }
@@ -67,8 +69,30 @@ class CallEventService : Service() {
             .build()
     }
 
-    private fun enqueueTranscriptionWorker() {
-        val request = OneTimeWorkRequestBuilder<TranscriptionWorker>().build()
+    private fun enqueueLatestRecording() {
+        val latest = latestRecordingPath() ?: return
+        val data = Data.Builder()
+            .putString(TranscriptionWorker.KEY_FILE_PATH, latest.absolutePath)
+            .build()
+        val request = OneTimeWorkRequestBuilder<TranscriptionWorker>()
+            .setInputData(data)
+            .build()
         WorkManager.getInstance(this).enqueue(request)
+    }
+
+    private fun latestRecordingPath(): File? {
+        val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME, MediaStore.Audio.Media.DATE_ADDED)
+        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC LIMIT 1"
+        val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val cursor = contentResolver.query(uri, projection, null, null, sortOrder)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val nameIdx = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                val name = it.getString(nameIdx)
+                val dir = File(getExternalFilesDir(null), "recordings")
+                return File(dir, name)
+            }
+        }
+        return null
     }
 }

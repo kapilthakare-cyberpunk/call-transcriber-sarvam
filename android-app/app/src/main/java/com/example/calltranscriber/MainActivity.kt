@@ -1,17 +1,16 @@
 package com.example.calltranscriber
 
 import android.Manifest
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,39 +21,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.calltranscriber.ui.theme.CallTranscriberTheme
+import com.example.calltranscriber.ui.screens.MainNavHost
 
 class MainActivity : ComponentActivity() {
 
-    private val requiredPermissions = arrayOf(
-        Manifest.permission.RECORD_AUDIO,
-        Manifest.permission.READ_PHONE_STATE,
-        Manifest.permission.POST_NOTIFICATIONS,
-        Manifest.permission.FOREGROUND_SERVICE,
-        Manifest.permission.READ_MEDIA_AUDIO
-    )
+    private val requiredPermissions = if (android.os.Build.VERSION.SDK_INT >= 33) {
+        arrayOf(
+            Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.FOREGROUND_SERVICE
+        )
+    } else {
+        arrayOf(
+            Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.FOREGROUND_SERVICE
+        )
+    }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
         val allGranted = granted.all { it.value }
         if (allGranted) {
-            setMainContent()
+            startService(Intent(this, CallTranscriberForegroundService::class.java))
         }
-    }
-
-    private fun hasAllPermissions(): Boolean =
-        requiredPermissions.all { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
             CallTranscriberTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     if (hasAllPermissions()) {
-                        setMainContent()
+                        MainNavHost()
                     } else {
                         PermissionRequestScreen(onGranted = {
                             permissionLauncher.launch(requiredPermissions)
@@ -65,11 +62,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun setMainContent() {
+    private fun hasAllPermissions(): Boolean =
+        requiredPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (hasAllPermissions()) {
+            startService(Intent(this, CallTranscriberForegroundService::class.java))
+        }
         setContent {
             CallTranscriberTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    com.example.calltranscriber.ui.screens.MainNavHost()
+                    if (hasAllPermissions()) {
+                        MainNavHost()
+                    } else {
+                        PermissionRequestScreen(onGranted = {
+                            permissionLauncher.launch(requiredPermissions)
+                        })
+                    }
                 }
             }
         }
