@@ -19,12 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import com.example.calltranscriber.ui.theme.CallTranscriberTheme
 
 class MainActivity : ComponentActivity() {
@@ -42,7 +38,7 @@ class MainActivity : ComponentActivity() {
     ) { granted ->
         val allGranted = granted.all { it.value }
         if (allGranted) {
-            navigateToHome()
+            setMainContent()
         }
     }
 
@@ -56,56 +52,24 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CallTranscriberTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
-                    NavHost(navController = navController, startDestination = "permissions") {
-                        composable("permissions") {
-                            PermissionRequestScreen(onGranted = {
-                                if (hasAllPermissions()) {
-                                    navController.navigate("home") {
-                                        popUpTo("permissions") { inclusive = true }
-                                    }
-                                } else {
-                                    permissionLauncher.launch(requiredPermissions)
-                                }
-                            })
-                        }
-                        composable("home") {
-                            HomeScreen()
-                        }
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    if (hasAllPermissions()) {
+                        setMainContent()
+                    } else {
+                        PermissionRequestScreen(onGranted = {
+                            permissionLauncher.launch(requiredPermissions)
+                        })
                     }
                 }
             }
         }
     }
 
-    private fun navigateToHome() {
+    private fun setMainContent() {
         setContent {
             CallTranscriberTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
-                    NavHost(navController = navController, startDestination = "home") {
-                        composable("home") {
-                            HomeScreen()
-                        }
-                        composable("permissions") {
-                            PermissionRequestScreen(onGranted = {
-                                if (hasAllPermissions()) {
-                                    navController.navigate("home") {
-                                        popUpTo("permissions") { inclusive = true }
-                                    }
-                                } else {
-                                    permissionLauncher.launch(requiredPermissions)
-                                }
-                            })
-                        }
-                    }
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    com.example.calltranscriber.ui.screens.MainNavHost()
                 }
             }
         }
@@ -119,32 +83,10 @@ fun PermissionRequestScreen(onGranted: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Permissions required",
-            style = MaterialTheme.typography.titleLarge
-        )
+        Text(text = "Permissions required", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = onGranted) {
             Text(text = "Grant permissions")
         }
-    }
-}
-
-@Composable
-fun HomeScreen() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Call Transcriber",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Event-driven call detection enabled.",
-            style = MaterialTheme.typography.bodyMedium
-        )
     }
 }

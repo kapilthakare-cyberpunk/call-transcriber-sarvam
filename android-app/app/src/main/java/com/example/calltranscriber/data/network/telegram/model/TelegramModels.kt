@@ -4,42 +4,16 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
-data class SendMessageRequest(
-    @Json(name = "chat_id")
-    val chatId: String,
+data class SendMessageBody(
+    val chat_id: String,
     val text: String,
-    @Json(name = "parse_mode")
-    val parseMode: String? = null,
-    @Json(name = "disable_web_page_preview")
-    val disableWebPagePreview: Boolean? = null
+    @Json(name = "parse_mode") val parseMode: String = "Markdown",
+    @Json(name = "disable_web_page_preview") val disableWebPagePreview: Boolean = true,
+    @Json(name = "reply_markup") val replyMarkup: String? = null
 )
 
 @JsonClass(generateAdapter = true)
-data class EditMessageTextRequest(
-    @Json(name = "chat_id")
-    val chatId: String,
-    @Json(name = "message_id")
-    val messageId: Long,
-    val text: String,
-    @Json(name = "parse_mode")
-    val parseMode: String? = null
-)
-
-@JsonClass(generateAdapter = true)
-data class SendMessageResponse(
-    @Json(name = "ok")
-    val ok: Boolean? = null,
-    @Json(name = "result")
-    val result: TelegramMessage? = null,
-    @Json(name = "description")
-    val description: String? = null,
-    @Json(name = "error_code")
-    val errorCode: Int? = null
-)
-
-@JsonClass(generateAdapter = true)
-data class TelegramMessage(
-    @Json(name = "message_id")
-    val messageId: Long,
-    val text: String? = null
+data class TelegramResponse(
+    val ok: Boolean,
+    val result: Map<String, Any>? = null
 )
